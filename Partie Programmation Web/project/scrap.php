@@ -4,7 +4,9 @@ require_once __DIR__ . "config/database.php";
 
 $BASE_URL = "https://www.emploitunisie.com/recherche-jobs-tunisie";
 
-
+// ----------------------------
+// EXTRAIRE LES COMPÉTENCES
+// ----------------------------
 function extract_skills($description) {
     $skills_keywords = ["python", "java", "c++", "javascript", "sql", "html", "css",
                         "management", "marketing", "communication", "excel"];
@@ -17,7 +19,10 @@ function extract_skills($description) {
     return implode(", ", $found_skills);
 }
 
-
+// ----------------------------
+// ----------------------------
+// SCRAPER UNE PAGE
+// ----------------------------
 function scrape_jobs_list($page_url, $BASE_URL) {
     $jobs = [];
     $html = file_get_contents($page_url);
@@ -31,10 +36,21 @@ function scrape_jobs_list($page_url, $BASE_URL) {
     foreach ($job_cards as $card) {
         $job = [];
 
-        // Titre et lien
+        // Titre et lien - CORRECTION ICI
         $titleNode = $xpath->query(".//h3/a", $card)->item(0);
         $job['titre'] = $titleNode ? trim($titleNode->nodeValue) : null;
-        $job['lien'] = $titleNode ? $BASE_URL . $titleNode->getAttribute('href') : null;
+        
+        // Récupérer le lien original
+        $job['lien'] = $titleNode ? $titleNode->getAttribute('href') : null;
+        
+        // Convertir le lien relatif en absolu
+        if ($job['lien'] && strpos($job['lien'], 'http') !== 0) {
+            if (strpos($job['lien'], '/') === 0) {
+                $job['lien'] = 'https://www.emploitunisie.com' . $job['lien'];
+            } else {
+                $job['lien'] = $BASE_URL . '/' . $job['lien'];
+            }
+        }
 
         // Entreprise
         $companyNode = $xpath->query(".//a[contains(@class,'card-job-company')]", $card)->item(0);
@@ -44,10 +60,12 @@ function scrape_jobs_list($page_url, $BASE_URL) {
         $descNode = $xpath->query(".//div[contains(@class,'card-job-description')]/p", $card)->item(0);
         $job['description'] = $descNode ? trim($descNode->nodeValue) : null;
 
-        // Lieu et type contrat
+        // Lieu, type contrat et salaire
         $liNodes = $xpath->query(".//ul/li", $card);
         $job['lieu'] = null;
         $job['type_contrat'] = null;
+        $job['salaire'] = null;
+        
         foreach ($liNodes as $li) {
             $parts = explode(":", $li->nodeValue);
             if (count($parts) >= 2) {
@@ -55,6 +73,7 @@ function scrape_jobs_list($page_url, $BASE_URL) {
                 $value = trim($parts[1]);
                 if (strpos($key, "lieu") !== false) $job['lieu'] = $value;
                 if (strpos($key, "contrat") !== false) $job['type_contrat'] = $value;
+                if (strpos($key, "salaire") !== false) $job['salaire'] = $value;
             }
         }
 
@@ -69,7 +88,7 @@ function scrape_jobs_list($page_url, $BASE_URL) {
 }
 
 // ----------------------------
-// SCRAPER + INSERTION
+// SCRAPER PLUSIEURS PAGES + INSERTION
 // ----------------------------
 $total_inserted = 0;
 $max_pages = 3;
